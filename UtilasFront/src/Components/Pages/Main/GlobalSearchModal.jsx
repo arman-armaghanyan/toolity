@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSearch } from '../../../context/SearchContext';
 import '../../ComponentStyles/SearchStyles.css';
+import { ImageComponent } from '../../Common/ImageComponent';
 
 // Helper to extract text from rich content objects or plain strings
 const getText = (field) => {
@@ -261,9 +262,10 @@ export function GlobalSearchModal() {
                                     onClick={() => handleResultClick(tool.id)}
                                     onMouseEnter={() => setSelectedIndex(index)}
                                 >
-                                    <div 
+                                    <ImageComponent
+                                        src={tool.thumbnail}
+                                        alt=""
                                         className="global-search-modal__result-thumb"
-                                        style={{ backgroundImage: `url(${tool.thumbnail})` }}
                                     />
                                     <div className="global-search-modal__result-content">
                                         <h4 className="global-search-modal__result-title">

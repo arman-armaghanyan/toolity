@@ -1,21 +1,22 @@
 import {Link, useNavigate, useParams, useLocation} from 'react-router-dom';
 import {useEffect, useState, useRef, useCallback, useMemo} from 'react';
 import {useSearch} from '../../../context/SearchContext';
+import {useTools} from '../../../context/ToolsContext';
 import {Footer} from '../Main/Footer';
+import {OtherToolsPresenter} from './OtherToolsPresenter';
 import '../../ComponentStyles/DetailPage.css';
 import {API_URL, BASE_API_URL} from '../../../config';
+import {useQuery} from "@tanstack/react-query";
+import {ImageComponent} from '../../Common/ImageComponent';
 
 export function MiniToolDetail() {
     const {appId} = useParams();
     const navigate = useNavigate();
     const location = useLocation();
 
-    const [tool, setTool] = useState();
-    const [allTools, setAllTools] = useState([]);
-    const [isLoading, setIsLoading] = useState();
-    const [error, setError] = useState(null);
     const [isScrolledToInfo, setIsScrolledToInfo] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isIframeLoading, setIsIframeLoading] = useState(true);
 
     const infoSectionRef = useRef(null);
     const toolSectionRef = useRef(null);
@@ -40,62 +41,18 @@ export function MiniToolDetail() {
         };
     }, [isMenuOpen]);
 
-    // Fetch tool data and all tools
-    useEffect(() => {
-        let isMounted = true;
+    const {isLoading:isToolLoading , data:tool, error} = useQuery({
+        queryKey: ['tool' + appId],
+        queryFn: () => {
+            return  fetch(`${BASE_API_URL}/${API_URL}/${appId}`)
+                .then((res) => res.json())
+        }})
 
-        const fetchTool = async () => {
-            setIsLoading(true);
-            setError(null);
-
-            try {
-                // Fetch specific tool details from the dedicated endpoint
-                const toolResponse = await fetch(`${BASE_API_URL}/${API_URL}/${appId}`);
-
-                if (!toolResponse.ok) {
-                    throw new Error(`Request failed with status ${toolResponse.status}`);
-                }
-
-                const toolData = await toolResponse.json();
-
-                if (!isMounted) {
-                    return;
-                }
-
-                // Handle both single object and array response
-                const normalizedTool = Array.isArray(toolData) ? toolData[0] : toolData;
-                setTool(normalizedTool ?? null);
-
-                // Also fetch all tools for the "other tools" section
-                const allToolsResponse = await fetch(`${BASE_API_URL}/${API_URL}`);
-                if (allToolsResponse.ok) {
-                    const allToolsData = await allToolsResponse.json();
-                    if (isMounted && Array.isArray(allToolsData)) {
-                        setAllTools(allToolsData);
-                    }
-                }
-            } catch (err) {
-                console.error('Unable to load tool detail', err);
-                if (isMounted) {
-                    setError('Could not load this tool right now.');
-                }
-            } finally {
-                if (isMounted) {
-                    setIsLoading(false);
-                }
-            }
-        };
-
-        fetchTool();
-
-        return () => {
-            isMounted = false;
-        };
-    }, [appId]);
+    const { tools: allTools, isLoading: isToolsLoading } = useTools();
 
     // Get random other tools (4-6 tools excluding current)
     const otherTools = useMemo(() => {
-        if (!allTools.length || !tool) return [];
+        if (!allTools || !allTools.length || !tool) return [];
         
         const filtered = allTools.filter(t => t.id !== appId);
         const shuffled = [...filtered].sort(() => Math.random() - 0.5);
@@ -106,7 +63,7 @@ export function MiniToolDetail() {
     // Smart ESC/Back navigation logic
     const handleBackNavigation = useCallback(() => {
         const previousPath = location.state?.from;
-        
+
         if (previousPath) {
             if (previousPath === '/' || previousPath === '/home') {
                 navigate('/');
@@ -147,14 +104,6 @@ export function MiniToolDetail() {
         }
     }, []);
 
-    // Scroll to tool section
-    const scrollToTool = useCallback(() => {
-        if (toolSectionRef.current) {
-            toolSectionRef.current.scrollIntoView({ behavior: 'smooth' });
-            setIsScrolledToInfo(false);
-            scrollThresholdTriggered.current = false;
-        }
-    }, []);
 
     // Threshold scroll detection
     useEffect(() => {
@@ -203,12 +152,13 @@ export function MiniToolDetail() {
         return '';
     };
 
+
     // Key Feature card component
     const KeyFeatureCard = ({ feature }) => {
         return (
             <div className="key-feature-card">
                 {feature.image && (
-                    <img
+                    <ImageComponent
                         src={feature.image}
                         alt=""
                         className="key-feature-card__icon"
@@ -230,7 +180,7 @@ export function MiniToolDetail() {
                 key={index}
                 className={`description-block description-block--${orientation}`}
             >
-                <img
+                <ImageComponent
                     src={block.image}
                     alt=""
                     className="description-block__image"
@@ -268,7 +218,7 @@ export function MiniToolDetail() {
         );
     };
 
-    if (isLoading) {
+    if (isToolLoading) {
         return (
             <section className="detail-shell__empty">
                 <h2>Loading…</h2>
@@ -381,11 +331,20 @@ export function MiniToolDetail() {
 
                 {/* Full-screen iframe with padding */}
                 <div className="tool-iframe-container">
+                    {isIframeLoading && (
+                        <div className="iframe-loading-overlay">
+                            <div className="iframe-loading-spinner">
+                                <div className="spinner"></div>
+                                <p>Loading tool...</p>
+                            </div>
+                        </div>
+                    )}
                     <iframe
                         className="tool-iframe"
                         src={tool.iframeUrl}
                         title={getText(tool.title)}
                         allow="clipboard-write; fullscreen; accelerometer; gyroscope"
+                        onLoad={() => setIsIframeLoading(false)}
                     />
                 </div>
 
@@ -431,7 +390,7 @@ export function MiniToolDetail() {
                 {/* About this tool */}
                 <article className="about-tool">
                     {/* Key Features Section */}
-                    {Array.isArray(tool.keyFeatures) && tool.keyFeatures.length > 0 && (
+                    {tool && Array.isArray(tool.keyFeatures) && tool.keyFeatures.length > 0 && (
                         <div className="key-features-section">
                             <div className="key-features-grid">
                                 {tool.keyFeatures.map((feature, index) => (
@@ -442,7 +401,7 @@ export function MiniToolDetail() {
                     )}
 
                     {/* Description Blocks */}
-                    {Array.isArray(tool.description) && tool.description.length > 0 ? (
+                    {tool && Array.isArray(tool.description) && tool.description.length > 0 ? (
                         <div className="description-blocks">
                             {tool.description.map((block, index) => (
                                 <DescriptionBlock key={block.id || index} block={block} index={index} />
@@ -451,36 +410,8 @@ export function MiniToolDetail() {
                     ) : null}
 
                     {/* Other tools section - At the end of descriptions */}
-                    {otherTools.length > 0 && (
-                        <section className="other-tools">
-                            <h2 className="other-tools__title">Discover more tools</h2>
-                            <div className="other-tools__grid">
-                                {otherTools.map((otherTool) => (
-                                    <Link 
-                                        key={otherTool.id} 
-                                        to={`/app/${otherTool.id}`}
-                                        state={{ from: location.pathname }}
-                                        className="other-tool-card"
-                                    >
-                                        <div className="other-tool-card__body">
-                                            <div
-                                                className="other-tool-card__thumb"
-                                                style={{ backgroundImage: `url(${otherTool.thumbnail})` }}
-                                                aria-hidden="true"
-                                            />
-                                            <div className="other-tool-card__content">
-                                                <h3 className="other-tool-card__title">
-                                                    {getText(otherTool.title)}
-                                                </h3>
-                                                <p className="other-tool-card__summary">
-                                                    {getText(otherTool.summary)}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </Link>
-                                ))}
-                            </div>
-                        </section>
+                    {!isToolsLoading && otherTools && otherTools.length > 0 && (
+                        <OtherToolsPresenter otherTools={otherTools} />
                     )}
                 </article>
 

@@ -23,8 +23,7 @@ export function SearchProvider({ children }) {
 
     const performSearch = useCallback(async (query) => {
         setSearchQuery(query);
-        
-        // If query is empty or undefined, clear results
+
         if (!query || query.trim() === '') {
             setSearchResults(null);
             setSearchError(null);
@@ -107,4 +106,5 @@ export function useSearch() {
     }
     return context;
 }
+
 
